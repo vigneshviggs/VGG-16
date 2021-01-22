@@ -5,9 +5,14 @@ Created on Mon Aug 19 13:17:02 2019
 @author: kalpesh
 """
 
+from tensorflow import keras
+import tensorflow as tf
+import keras as K
+from keras.models import Sequential
 from keras.layers import Input, Conv2D, MaxPooling2D
-from keras.layers import Dense, Flatten
+from keras.layers import Dense, Conv2D, MaxPool2D , Flatten
 from keras.models import Model
+from keras.preprocessing.image import ImageDataGenerator
 from keras.applications.vgg16 import VGG16
 from keras.applications.vgg16 import decode_predictions
 from keras.applications.vgg16 import preprocess_input
@@ -18,6 +23,8 @@ import seaborn as sns
 import numpy as np
 import os,cv2
 
+gpu_options = tf.compat.v1.GPUOptions(allow_growth=True)
+session = tf.compat.v1.InteractiveSession(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
 #%%
 # Loading the image and Pre-processing
 
@@ -32,7 +39,7 @@ try:
     num_channel=1
 #num_epoch=200
 
-# Define the number of classes
+
 
     img_data_list=()
 
@@ -73,38 +80,56 @@ def _get_predictions(_model):
 #%%
 #Defining the model
 
-_input = Input((224,224,3))        
-conv1  = Conv2D(filters=64, kernel_size=(3,3), padding="same", activation="relu")(_input)
-conv2  = Conv2D(filters=64, kernel_size=(3,3), padding="same", activation="relu")(conv1)
-pool1  = MaxPooling2D((2, 2))(conv2)
+model = Sequential()
+model.add(Conv2D(input_shape=(224,224,3),filters=64,kernel_size=(3,3),padding="same", activation="relu"))
+model.add(Conv2D(filters=64,kernel_size=(3,3),padding="same", activation="relu"))
+model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+model.add(Conv2D(filters=128, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(Conv2D(filters=128, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+model.add(Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
 
-conv3  = Conv2D(filters=128, kernel_size=(3,3), padding="same", activation="relu")(pool1)
-conv4  = Conv2D(filters=128, kernel_size=(3,3), padding="same", activation="relu")(conv3)
-pool2  = MaxPooling2D((2, 2))(conv4)
+model.add(Flatten())
+model.add(Dense(units=4096,activation="relu"))
+model.add(Dense(units=4096,activation="relu"))
+model.add(Dense(units=2, activation="softmax"))
+#%%
 
-conv5  = Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu")(pool2)
-conv6  = Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu")(conv5)
-conv7  = Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu")(conv6)
-pool3  = MaxPooling2D((2, 2))(conv7)
+trdata = ImageDataGenerator()
+traindata = trdata.flow_from_directory(directory="train",target_size=(224,224))
+tsdata = ImageDataGenerator()
+testdata = tsdata.flow_from_directory(directory="validation", target_size=(224,224))
+#%%
 
-conv8  = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(pool3)
-conv9  = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(conv8)
-conv10 = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(conv9)
-pool4  = MaxPooling2D((2, 2))(conv10)
+num_classes = 2
+print(traindata.shape)
+num_of_samples = traindata.shape[0]
+labels = np.ones((num_of_samples,),dtype='int64')
 
-conv11 = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(pool4)
-conv12 = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(conv11)
-conv13 = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(conv12)
-pool5  = MaxPooling2D((2, 2))(conv13)
 
-flat   = Flatten()(pool5)
-dense1 = Dense(4096, activation="relu")(flat)
-dense2 = Dense(4096, activation="relu")(dense1)
-output = Dense(1000, activation="softmax")(dense2)
+#%%
 
-vgg16_model  = Model(inputs=_input, outputs=output)
+from keras.optimizers import Adam
+opt = Adam(lr=0.001)
+model.compile(optimizer=opt, loss=keras.losses.categorical_crossentropy, metrics=['accuracy'])
+model.summary()
 
-vgg16_model.summary()
+from keras.callbacks import ModelCheckpoint, EarlyStopping
+checkpoint = ModelCheckpoint("vgg16_1.h5", monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
+early = EarlyStopping(monitor='val_acc', min_delta=0, patience=20, verbose=1, mode='auto')
+hist = model.fit_generator(steps_per_epoch=10,generator=traindata, validation_data= testdata, validation_steps=10,epochs=100,callbacks=[checkpoint,early])
+
 #%%
 #Prediction
 
